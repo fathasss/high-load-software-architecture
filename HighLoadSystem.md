@@ -161,7 +161,7 @@ Client -> Load Balancer -> Server Y -> Sepeti Redis' ten okur.
 
 **Hangi sunucuya düşerse düşsün, client' ın durumu ortak bir yerde tutulur.**
 
-* Soru : Bu örnekte State'i merkezi tutmak için en mantıklı yer neresi olabilir ? 
+* 1️⃣ : Bu örnekte State'i merkezi tutmak için en mantıklı yer neresi olabilir ? 
 
 1. Database(Sepet tablosu içersinde tutmak)
 2. Redis(Hızlı cache depolama)
@@ -257,13 +257,13 @@ Sen instagramda bir postu like' ladın.
 
 **Bu bir bug değil eventual consistency' dir.**
 
-* Soru: Bir e-ticaret sitesinde "ürün stok sayısı" sence hangi modelle tutulmalı? (Strong mu, Eventual mı?) Neden ? 
+* 1️⃣: Bir e-ticaret sitesinde "ürün stok sayısı" sence hangi modelle tutulmalı? (Strong mu, Eventual mı?) Neden ? 
 
 * Cevap: Bir e-ticaret sitesinde ürünün stok sayısı strong consistency ile tutulabilir. 
           Çünkü sepete ekleyip sipariş verildiğinde eğer bir gecikme yaşanırsa sonrasında siparişin iptali gibi
           müşterilerde olumsuz durumlara yol açma riski vardır.
 
-* Soru: **Kullanıcı profiline ait gösterilen takipçi sayısı** sence strong consistency mi gerektirir yoksa eventual olabilir mi?
+* 2️⃣: **Kullanıcı profiline ait gösterilen takipçi sayısı** sence strong consistency mi gerektirir yoksa eventual olabilir mi?
 
 * Cevap: Kullanıcı profiline ait gösterilen takipçi sayısı eventual consistency ile işlem yapılması daha sağlıklı olur. 
          Çünkü 1. cevapdaki gibi çok çok olumsuz durumlara ve sonrasında yaşanacak krizlere sebebiyet verecek bir öncelik olmadığını düşünüyorum.
@@ -316,11 +316,11 @@ user_id = 762 => 762 % 4 = 2 -> Database B
 2. **Shard Rebalancing:** "Shard 1 çok doldu,2 boş kaldı" gibi durumlarda yeniden dağıtım gerektirir.
 3. **ID Uniqueness:** Farklı shard' lardaki veriler çakışabilir. -> *global_id* sistemi gerekebilir.
 
-* Soru: Sence “Kullanıcı tablosu”nu sharding yapmak mantıklıdır ama “Ürün kategorileri” tablosunu sharding yapmak mantıklı mıdır? Neden?
+* 1️⃣: Sence “Kullanıcı tablosu”nu sharding yapmak mantıklıdır ama “Ürün kategorileri” tablosunu sharding yapmak mantıklı mıdır? Neden?
 
 * Cevap: Bence ürün kategorileri tablosunu sharding yapmak çok değildir. Çünkü kategorilerin mutlak bir sınırı vardır. Bu yüzden datanın bölünmesi gerektiğini düşünmüyorum.
 
-* Soru: Sharding yapıldığında "user_id = 1234" için hangi shard kullanılabileceğini nasıl bilebiliriz. (Senin önerdiğin yöntem)
+* 2️⃣: Sharding yapıldığında "user_id = 1234" için hangi shard kullanılabileceğini nasıl bilebiliriz. (Senin önerdiğin yöntem)
 
 * Cevap: Çok büyük bir trafik düşündüğümüzde mesela amazon gibi. Önce Geo Sharding yöntemi ile bölgelere ayırıp ardından aynı bölgelerdeki kullanıcılar için de Hash Sharding kullanarak daha verimli bir bölümleme ile sistemin daha stabil ve hızlı çalışabileceğini düşünmüyorum.
 Mesela Türkiye' de kayıt olan bir amazon kullanıcısı Geo Sharding yöntemi ile TR sunucularına kayıt olacak ardından TR' de bulunan istanbul, Ankara veya İzmir gibi illerde bulunan sunucularında Hash Sharding kullanarak veri paylaşımı yapmak daha sağlıklı olabilir. Cevap Amerika için yine Amazon gibi yüksek trafikli bir sistemden bahsedecek olursak ilk olarak Geo sharing ile kıta bazlı ABD sunucusu olarak böler sonrasında yine Geo sharding ile bu sefer ABD içerisindeki sunucuları eyalet bazlı bölerdim ve eyalatlerde bulunan sunucuları Hash Sharding ile bölmeyi düşnürdüm. Mesela Washington için aktif 30 sunucu varsa bu 30 sunucu da Hash Sharding yöntemi uygulardım. 
@@ -331,9 +331,112 @@ Mesela Türkiye' de kayıt olan bir amazon kullanıcısı Geo Sharding yöntemi 
 
 ---
 
+# Message Queues & Asenkron İşlem (Event Driven Architecture)
 
+## ✅ Message Queue Nedir?
 
+> Üretilen olarayları (event) *hemen işlemek sıraya koymak* ve asenkron **(gecikmeli ama garantili)** şekilde işlemek için kullanılan sistemdir.
 
+### 📌Neden Kullanılır?
+
+Çünkü gerçek dünyada bazı işlemler hemen yapılmak zorunda değildir.
+
+| `İşlem` | `Senkron Durumu` |
+| --- | --- |
+| Kullanıcı 'Pay' butonuna bastı - > Ödeme Onayı | Senkron olmalı(Hemen cevap vermeli) |
+| Ödemeden sonra 'Mail Gönder' | Asenkron (Sıra kuyruğa yaz, arkadan işlenir.) |
+| Like sayısını artır | Asenkron yapılabilir | 
+| Kullanıcıya bildirim gönder | Kuyruğa atılabilir |
+| büyük resmi sıkıştır. | Kuyruğa at |
+
+### Queue Kullanmazsan Ne Olur ?
+
+Örnek: 
+
+```
+POST /buy
+
+-> DB insert
+-> Stok azalt
+-> Mail gönder
+-> PDF Fatura oluştur
+-> Bildirim gönder
+-> Slack mesajı gönder
+```
+
+Hepsini aynı anda yaparsan 5 saniye sürer. Kullanıcı "bozuldu mu?" diye sayfayı kapatır.
+
+### Queue ile Doğru Mimari
+
+```
+POST /buy
+-> DB insert + Stok düş (sadece ana işlem)
+-> Event "OrderCreated" kuyruğa yazılır
+-> Worker' lar arkadan: Mail, Fatura, Bildirim, Slack gönderir.
+```
+
+Kullanıcıya cevap verilir. -> **Sipariş Alındı**
+
+Arka planda herşey devam eder.
+
+**Message Queue Örnekleri:**
+
+| `Sistem` | `Type` | `Kullanım` |
+| --- | --- | --- |
+| RabbitMQ | Message Broker | Küçük-Orta Sistemler |
+| Kafka | Event Streaming | Yüksek throughput -> 1M+ events | 
+| AWS SQS, GCP Pub/Sub | Cloud Queue | Serverless kullanım |
+| Redis Stream | Lightweight Queue | Basit İşler için |
+
+* 1️⃣: Bir e-ticaret sitesinde "Sipariş verildiğinde mail gönderme" işlemi sence Senkron mu olmalı, Asenkron mu? Neden ?
+
+* Cevap: Bence asenkron olmalı. Senkron bir sipariş akışı tasarlanmış ve canlı data yazılmış. Kullanıcı artık siparişini vermiş ve gerekli stok işlemleri yapılmış. Bu yüzden mail kullanıcı için bir ek bilgilendirme. Kuyruğa alınıp bekletilebilir.
+
+* 2️⃣: Like butonuna basıldığında sayacı hemen artırmak mı gerekir, yoksa Queue' ya atıp gecikmeli artırmak da olur mu? 
+
+* Cevap: İlk sayaç işlemi cache' de yapılıp cache' deki sayacın artılırılıp canlı yazma işlemi asenkron yapılması daha sağlıklı olur. Çünkü ünlü bir influencer' ın sosyal medya postu saniyeler içerisinde çok fazla trafik alabilir. Bu yüzden canlı data olarak aktarma işlemi asenkron olarak yapılması ve kuyruk yapısı ile kurgulanması daha sağlıklı olur. 
+
+**İkinci sorunun cevabı için "Burst Traffic" ihtimalinin düşünülmüş olması gayet mantıklı. Büyük sistemler (Instagram, Twitter) exactly this! yöntemini kullanmaktadır.**
+
+---
+
+# Eventual Consistency Gerçek Dünyada Nasıl Yönetilir?
+
+Consistency konusuna önce teorik olarak baktık ama şimdi eventual consistency ile yapılan tutarsızlıklar nasıl yönetilir kısmına geçelim.
+
+## Senaryo:
+
+Bir e-ticaret sitesindesin.
+
+- Kullanıcı Siparişi Verdi -> Ödeme Alındı ✅
+- Ama arkaplanda çalışan asenkron işlemlerden biri **BAŞARISIZ** oldu. (örneğin stok güncellemesi yapmadı.)
+
+| `Strateji` | `Açıklama` | `Risk` |
+| --- | --- | --- | 
+| Strong Consistency (Transactional) | Tüm adımlar aynı anda yapılır, biri fail olursa geri alınır. | Kullanıcı bekler, yavaşlatır. |
+| Eventual Consistency + Retry Queue | Başaramayan event tekrar kuyruğa atılır ve yeniden denenir. | Bazı event' lar *eninde sonunda* olur ama geç olabilir. |
+| SAGA Pattern (Compensating Action) | **Eğer stok güncellemesi başarısız ise -> Siparişi otomatik iptal et ve parayı geri öde.** | Kullanıcıyı üzmeden rollback. |
+
+## SAGA Pattern (Dağıtık Transactionların Kurtarıcısı)
+
+| `Step` | `Process` | `Is Success?` | 
+| --- | --- | --- |
+| 1 | Payment-> Success | Compensate: Para iadesi | 
+| 2 | Stok düş | Compensate: Stok Geri Ekle | 
+| 3 | Siparişi DB' ye yaz | Compensate: Satır sil |
+| 4 | Mail gönder | (Gerek yok, sadece logla) | 
+
+* 1️⃣ Eventual consistency kullanılan sistemlerde “başarısız event’ler” için nasıl bir strateji uygulanmalıdır? Retry mi, kompanzasyon mu, loglayıp bırakmak mı? Sen nasıl karar verirsin?
+
+* Cevap: Başarısız event' lar için transactional işlem uygulanabilir. Bir siparişin verildiğini varsayalım. Ödeme ve Stoktan düşme işlemi Strong Consistency yapısı ile yapılmış olsun.
+Kuyruk yapısı kullanılarak mail gönderme gibi işlemler söz konusu. Kuyrukda hata alındığında mail gönderme, fatura kesme gibi işlemler SAGA Pattern ile yapılabilir.
+Yada yalnızca ödeme adımları Strong Consistency ile yapıldıysa. Stoktan düşme, mail gönderme ve fatura gönderme gibi işlemlerde SAGA Pattern kullanılarak işlemler geri alınabilir sipariş iptal edilip para iadesi sağlanabilir. İki yolda sağlıklıdır. 
+
+* 2️⃣ Sence bir bankacılık sisteminde “para transferi” eventual consistency olabilir mi? Yoksa strong mu olmak zorunda?
+
+* Cevap: Bence bir bankacılık sisteminde para transferi işlemi kuyruk yapısı ile yapılmalı. Yani Eventrual Consistency ve denenebilir kuyruk yapısı kullanılabilir. Çünkü bankacılık sistemlerinde para transferi yapılırken istek yapılan servislerde farklı farklı sorgulama servisleri çalışabilir ve bu trafiğin yönetilmesi için Eventual Consistency daha uygundur.
+
+---
 
 
 
