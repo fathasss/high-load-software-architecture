@@ -177,8 +177,9 @@ Client -> Load Balancer -> Server Y -> Sepeti Redis' ten okur.
 
 * Cevap : 
 ```
-Ben 2. cevabı seçerdim redis' te tutmak daha mantıklı. Database' de tutmak da mantıklı olabilir ancak tek mantıksız olan yol token' da saklamak olduğunu düşünüyorum
-çünkü token süresinin belirli expire süresi var ve bu süre belki 1 hafta sonra dolabilir ve sepet datası kaybolabilir.
+Ben 2. cevabı seçerdim redis' te tutmak daha mantıklı. Database' de tutmak da mantıklı olabilir.
+Ancak tek mantıksız olan yol token' da saklamak olduğunu düşünüyorum.
+Çünkü token süresinin belirli expire süresi var ve bu süre belki 1 hafta sonra dolabilir ve sepet datası kaybolabilir.
 ```
 
 **Cevap değerlendirmesi:** 
@@ -192,4 +193,30 @@ Ben 2. cevabı seçerdim redis' te tutmak daha mantıklı. Database' de tutmak d
 **Yani Redis, üçünün arasında en dengeli olanı** -- hem stateless sistemi destekler, hem de yüksek trafikte hızlı çalışır.
 
 ---
+
+# Cache & Database Stratejileri (Redis+DB İlişkisi)
+
+Bu derste şu netleştirilecek.
+
+> "Veri nereye yazılmalı? Cache nereye, database nereye? Hangisi önce okunmalı?"
+
+**3 çeşit cache stratejisi vardır.**
+
+1. **Read-Through Cache:** Client DB' ye gitmez. -> Cache' e gider. Cache' de yoksa DB' den çeker. (Kullanıcı verileri, profil bilgisi vb.)
+2. **Write-Through Cache:** Yazılan her veri önce cache' e, sonra DB' ye yazılır. (Kalıcı olması gereken data)
+3. **Write-Back (Write-Behind):** Veri önce sadece cache'e yazılır, sonra arkadan DB' ye flush edilir. (Sepet/ Like sistemi gibi geçici, toleranslı veriler)
+
+Sistem ve kullanılan cache stratejisi olarak incelersek: 
+
+| `Sistem` | `Cache Stratejisi`|
+| --- | --- | 
+| User Profile | **Read-Through** (cache varsa ordan oku, yoksa DB' den çek.) |
+| Sepet | **Write-Back** (Redis'te tut -> Db' ye periyodik yazabilirsin veya hiç yazmayabilirsin.) |
+| Banka Bakiyesi | Asla cache yazarken DB' ye gecikmeli gitmemeli -- **Write-Through** yada direkt DB  |
+
+- Cache, verinin kopyasıdır. Database' in yerine geçmez.
+- Redis gibi cache' ler volatile (uçucu) olabilir; tamamen kritik olan veriler için DB garanti noktasıdır.
+- Sepet gibi geçici ama hızlı olması gereken şeyleri Redis' te tutmak en makul yoldur.
+
+
 
