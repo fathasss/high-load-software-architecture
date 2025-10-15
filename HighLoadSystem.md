@@ -67,17 +67,9 @@ Client-> Load Balancer -> Server1 / Server2 / Server3
 
 **Popüler Load Balancer' lar :**
 
-* Yazılım Bazlı
-
-- nginx
-- HAProxy
-
-* Cloud Managed
-
-- AWS ELB/ ALB
-- Google LB
-- Azure LB
-
+| `Yazılım Bazlı` | `Cloud Managed` |
+| --- | --- | 
+| nginx,HAProxy |  AWS ELB/ ALB, Google LB, Azure LB  |
 
 > Vertical Scaling neden uzun vadede sürdürülebilir değildir?
 
@@ -217,6 +209,129 @@ Sistem ve kullanılan cache stratejisi olarak incelersek:
 - Cache, verinin kopyasıdır. Database' in yerine geçmez.
 - Redis gibi cache' ler volatile (uçucu) olabilir; tamamen kritik olan veriler için DB garanti noktasıdır.
 - Sepet gibi geçici ama hızlı olması gereken şeyleri Redis' te tutmak en makul yoldur.
+
+**Sepet sipariş mantığında 'Sepet = geçici state', 'Sipariş = kalıcı state' olarak değerlendirilebilir.**
+
+---
+
+# Replication & Consistency (Master-Slave/ Primary-Replica/ Strong vs Eventual)
+
+Şimdi sistemleri çoğalttık (scaling), cache' e aldık (Redis). Sıradaki soru: 
+
+> Database' i nasıl ölçeklendiririz?
+> Yani High Load altında okumalar ve yazmalar nasıl dağıtılır? 
+
+## Database Replication Nedir ? 
+
+Bir DB' yi birden fazla kopya olarak tutmak demektir.
+
+**Roller:**
+1. Primary(Master): Tüm yazmalar (INSERT/UPDATE) buraya yapılır.
+2. Replica(Slave/Read Replica): Sadece okumalar yapılır.(SELECT) 
+
+Yazma/ Okuma Ayrımı Böyle Çalışır: 
+
+```
+Client(Write) -> Primary DB
+Client(Read)  -> Replica DB' ler
+```
+
+Böylece yük paylaşılmış olur.
+
+⚠️ Ancak burada bir sorun var : **Replication Lag**
+
+- Primary DB' ye veri yazılır.
+- Replica bu veriyi hemen mi alır? -> *Hayır, çoğu zaman gecikmeli gelir.*
+
+Bu yüzden ortaya iki tip tutarlılık modeli çıkar:
+
+1. **Strong Consistency:** Yazılan veri anında tüm DB' lerde görünür. (Örn: Bankacılık Sistemleri) 
+2. **Eventual Consistency:** Veriler kısa süreliğine farklı olabilir, ama sonunda eşitlenir. (Örn: Sosyal Medya like sayıları)
+
+### Eventual Consistency' nin Klasik Örnekleri:
+
+Sen instagramda bir postu like' ladın.
+
+- Hemen altta "12502 -> 12503 beğeni" olur.
+- Arkadaşın telefonunda hala 12502 görünüyor.
+
+**Bu bir bug değil eventual consistency' dir.**
+
+* Soru: Bir e-ticaret sitesinde "ürün stok sayısı" sence hangi modelle tutulmalı? (Strong mu, Eventual mı?) Neden ? 
+
+* Cevap: Bir e-ticaret sitesinde ürünün stok sayısı strong consistency ile tutulabilir. 
+          Çünkü sepete ekleyip sipariş verildiğinde eğer bir gecikme yaşanırsa sonrasında siparişin iptali gibi
+          müşterilerde olumsuz durumlara yol açma riski vardır.
+
+* Soru: **Kullanıcı profiline ait gösterilen takipçi sayısı** sence strong consistency mi gerektirir yoksa eventual olabilir mi?
+
+* Cevap: Kullanıcı profiline ait gösterilen takipçi sayısı eventual consistency ile işlem yapılması daha sağlıklı olur. 
+         Çünkü 1. cevapdaki gibi çok çok olumsuz durumlara ve sonrasında yaşanacak krizlere sebebiyet verecek bir öncelik olmadığını düşünüyorum.
+
+**Kritik olmayan datalarda Eventual Consistency, kritik datalarda Strong Consistency seçimi yapılır. High Load sistem tasarımı tam da bu dengeyi kurmak demektir.**
+
+---
+
+# Partitioning/ Sharding (Gerçek Ölçeklenme Burada Başlar.)
+
+Cache ekledik. Replication yaptık ama bir noktada tek bir Primary DB bile yetmeyecek.
+
+İşte bu durumda yapılacak şey: 
+
+> Database'i bölmek.
+
+## Partitioning/ Sharding Nedir? 
+
+**Devasa bir tabloyu veya database' iki ya da daha fazla parçaya bölmek.**
+
+Böylece:
+
+```
+instread of -> 1 DB with 1M users
+we do -> 10 DB each with 10K users
+```
+
+### Sharding Yöntemleri:
+
+1. **Range Sharding:** Alfabetik veya ID aralığına göre *(Örn: A-M -> DB1, N-Z -> DB2)*
+2. **Hash Sharding:** ID' yi hash' leyip mod alarak *(Örn: user_id % 4 -> 4 farklı shard)*
+3. **Geo Sharding:** Lokasyona göre *(Örn: Avrupa ayrı DB, Amerika ayrı DB)*
+4. **Feature/Entity Based:** Veri tipine göre *(Örn: dbo.Users tablosu farklı, dbo.Orders farklı DB' de )*
+
+* Örnek: Kullanıcıları Hash ile Shard Et:
+
+```
+Shard = user_id % 4 
+
+user_id = 341 => 341 % 4 = 1 -> Database A 
+user_id = 762 => 762 % 4 = 2 -> Database B
+
+```
+
+**Her sunucu sadece kendi parçasını bilir -> yük dağıtılır,sorgular hızlanır.**
+
+**Sharding Sorunları:**
+
+1. **Cross-Shard Query:** "Bir kullanıcının 5 siparişi, 3 yorumu ve 2 adresi var." -> hepsi farklı DB' de ise toplamak zorlaşır.
+2. **Shard Rebalancing:** "Shard 1 çok doldu,2 boş kaldı" gibi durumlarda yeniden dağıtım gerektirir.
+3. **ID Uniqueness:** Farklı shard' lardaki veriler çakışabilir. -> *global_id* sistemi gerekebilir.
+
+* Soru: Sence “Kullanıcı tablosu”nu sharding yapmak mantıklıdır ama “Ürün kategorileri” tablosunu sharding yapmak mantıklı mıdır? Neden?
+
+* Cevap: Bence ürün kategorileri tablosunu sharding yapmak çok değildir. Çünkü kategorilerin mutlak bir sınırı vardır. Bu yüzden datanın bölünmesi gerektiğini düşünmüyorum.
+
+* Soru: Sharding yapıldığında "user_id = 1234" için hangi shard kullanılabileceğini nasıl bilebiliriz. (Senin önerdiğin yöntem)
+
+* Cevap: Çok büyük bir trafik düşündüğümüzde mesela amazon gibi. Önce Geo Sharding yöntemi ile bölgelere ayırıp ardından aynı bölgelerdeki kullanıcılar için de Hash Sharding kullanarak daha verimli bir bölümleme ile sistemin daha stabil ve hızlı çalışabileceğini düşünmüyorum.
+Mesela Türkiye' de kayıt olan bir amazon kullanıcısı Geo Sharding yöntemi ile TR sunucularına kayıt olacak ardından TR' de bulunan istanbul, Ankara veya İzmir gibi illerde bulunan sunucularında Hash Sharding kullanarak veri paylaşımı yapmak daha sağlıklı olabilir. 
+
+Cevap Amerika için yine Amazon gibi yüksek trafikli bir sistemden bahsedecek olursak ilk olarak Geo sharing ile kıta bazlı ABD sunucusu olarak böler sonrasında yine Geo sharding ile bu sefer ABD içerisindeki sunucuları eyalet bazlı bölerdim ve eyalatlerde bulunan sunucuları Hash Sharding ile bölmeyi düşnürdüm. Mesela Washington için aktif 30 sunucu varsa bu 30 sunucu da Hash Sharding yöntemi uygulardım. 
+
+> **Eğer data çok küçükse -> bölmek yerine tüm sunuculara kopyalamak daha mantıklıdır. (Replication)**
+> **Eğer data büyükse -> parçalamak zorundayız. (Sharding)**
+
+
+
 
 
 
