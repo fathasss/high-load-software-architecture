@@ -27,7 +27,7 @@ Günde 2.000.000.000 tıklama
 
 👉 Bu yükü tek bir sunucu kaldıramaz. İşte bu yüzden High Load mimarisi gerekir.
 
-## High Load Sistemlerin olayı sadece güçlü donanım değil, trafiği doğru yönetebilmektir.
+**High Load Sistemlerin olayı sadece güçlü donanım değil, trafiği doğru yönetebilmektir.**
 
 ---
 
@@ -128,10 +128,11 @@ Bu sisteme **Stateless Architecture** denir.
 
 **Çözüm:**
 
-| State Saklama Yeri | Açıklama
-| Redis | En çok kullanılan shared session store |
-| Database | Kullanıcı bilgisi DB' de tutulabilir |
-| JWT/ Token | Durumu client tarafına encode edip geri gönderirsin. (sunucu state tutmaz) |
+| `State Saklama Yeri` | `Açıklama`                                                                 |
+|  ---                 |  ---                                                                       |
+| Redis                | En çok kullanılan shared session store                                     |
+| Database             | Kullanıcı bilgisi DB' de tutulabilir                                       |
+| JWT/ Token           | Durumu client tarafına encode edip geri gönderirsin. (sunucu state tutmaz) |
 
 ### 🔁 Bonus: Sticky Session Nedir?
 
@@ -182,10 +183,11 @@ Ben 2. cevabı seçerdim redis' te tutmak daha mantıklı. Database' de tutmak d
 
 **Cevap değerlendirmesi:** 
 
-| Seçenek | Avantaj | Dezavantaj | Değerlendirme |
-| DB' de saklamak | Kalıcı, güvenli | Yavaş (her sepet aksiyonunda DB sorgusu döner -> yük bindirir.) | Mantıklı ama ağır olabilir.|
+| `Seçenek`          | `Avantaj`                              | `Dezavantaj`                                                            | `Değerlendirme`                             |
+| ---                | ---                                    | ---                                                                     | ---                                         |
+| DB' de saklamak    | Kalıcı, güvenli                        | Yavaş (her sepet aksiyonunda DB sorgusu döner -> yük bindirir.)         | Mantıklı ama ağır olabilir.                 |
 | Redis' te saklamak | Çok hızlı(in-memory) TTL ayarlanabilir.| Redis çökse data kaybolabilir -> **ama backup/replication yapılabilir** | Sepet gibi "geçici state" için ideal tercih |
-| Token' da saklamak | Sunucusuz, stateless | Token şişer (büyük payload), expire olursa sepet kaybolur. | Riskli |
+| Token' da saklamak | Sunucusuz, stateless                   | Token şişer (büyük payload), expire olursa sepet kaybolur.              | Riskli                                      |
 
 **Yani Redis, üçünün arasında en dengeli olanı** -- hem stateless sistemi destekler, hem de yüksek trafikte hızlı çalışır.
 
