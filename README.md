@@ -562,3 +562,132 @@ Her kullanıcıya bir bucket (kova) veriyoruz.
 3. Fixed Window (Her 1 dakikada bir limit sıfırlanır)
 
 * Cevap: Eğer yalnızca bir tanesini kullanacak isem Sliding Window rate limit modelini seçerdim. Çünkü brute force karşı daha önemli bir yöntem olurdu. Ama eğer birden fazla kullanacaksam Sliding Window ve Token Bucket yöntemlerini bir arada kullanabilirdim. Login endpoint' i için belirli sayıda bir token olurdu mesela 3 token. İlk 3 denemede parolayı hatırlamadıysa kullanıcı Token Bucket' ta login endpoint için olan istekleri sıfırlardım ve iki adımlı doğrulama kullanmasını isterdim. Burda da aşırı istek oluyorsa şayet sliding window ile belirlediğim limite göre bağlantıyı kapatırdım. 
+
+# Circuit & Breaker Failover
+
+* Neden Gerekli ?
+
+Bir servise ya da dışa bağımlı bir kaynağa sürekli başarısız istek atmak tüm sistemi yavaşlatır veya çökertir. **Circuit Breaker** bu tür aksaklıklarda aracı olarak davranır: belirli bir başarısızlık eşiğine gelince daha fazla istek göndermeyi keser, sistemin geri kalanını korur. Failover ise arızalı servisten trafiği başka sağlıklı servise yönlendirmektir.
+
+## Temel Kavramlar
+
+1. **Timeouts:** Her isteğin makul bir süre içinde geri dönmediğni düşünerek zaman aşımı koyar.
+2. **Retries with Backoff:** Hata alındığında hemen tekrar denemek yerine artan gecikme (exponential backoff + jitter) uygula.
+3. **Circuit Breaker States:** 
+* Closed : Normal durum istekler gönderilir.
+* Open: Hatalar yüksek -> istekler reddedilir kısa süreliğine.
+* Half-Open: Belirli aralık sonra az sayıda deneme gönderilir; başarılıysa Closed' a döner, başarısızsa tekrar Open.
+* Bulkhead: Kaynakları bölümlere ayır; bir bölüm çökse diğerleri çalışmaya devam eder. (örn: thread pool' lar).
+* Failover/ Graceful Degradation: Bir hizmet çöktüğünde alternatif servis, cached response veya degraded ux sun.
+
+### Tipik Circuit Breaker Kuralları (pratik)
+
+* windowSize: son N istekte ne kadar hata yoksa?
+* failureThreshold: % hata oranı (örn. %50) veya hatalı istek sayısı (örn. 20) aşılırsa Open
+* openTimeout: Open durumunda bekleme süresi (örn. 30s).
+* halfOpenMaxCalls:  Half-open' dayken kaç istek test edilecek. (örn. 5).
+* successThreshold: Half-open testlerde kaç başarılı istek şart (örn. 3) -> Closed.
+
+**Örnek: PseudoCode (basit circuit breaker)**
+
+```pseudo
+
+class CircuitBreaker{
+        state = "CLOSED"
+        failures = 0
+        successCount = 0
+        lastFailure = null
+
+        onRequest(call):
+            if state == "OPEN":
+                if now-lastFailureTime < OPEN_TIMEOUT:
+                    throw CircuitOpenException
+                else:
+                    state = "HALF_OPEN"
+                    successCount = 0
+
+            try:
+                resp = call()
+                onSuccess()
+                return resp
+            except Exception:
+                onFailure()
+                throw
+
+        onSuccess():
+            if state == "HALF_OPEN":
+                successCount += 1
+                if successCount >= SUCCESS_THRESHOLD:
+                    state = "CLOSED"
+                    failures = 0
+                else:
+                    failures = 0
+
+        onFailures():
+            failures += 1
+            lastFailuretime = now
+            if  failures > FAILURE_THRESHOLD:
+                state = "OPEN"
+}
+
+```
+### Retries & Backoff (iyi uygulama)
+
+1. **MaxRetries:** 3
+2. **Backoff:** exponential (e.g., 100ms,  200ms, 400ms)
+3. **Jitter:** küçük rastgeleleştirme ekle, thundering hard önlenir.
+4. **Idempotency:** retry edilebilecek çağrılar idempotent olmalı veya idempotency-key kullanılmalı. (örn: ödeme işlemleri için)
+
+### Failover & Routing
+
+1. **Active-Passive:** Primary' den hata alındığında Secondary' ye yönlendir.
+2. **Active-Active:** Trafik her iki bölgeye de gider; bir bölge düşerse diğerleri kalır.
+3. **Geo-Failover:** Bölge düşerse DNS veya global LB ile trafiği başka bölgeye taşı.
+
+Örnek : DB read-replicas -> read from nearest replica; primary fail olursa promote replica veya route clients to other region.
+
+### Bulkhead & Resource Isolation
+
+- Her dış API için ayrı thread pool veya connection pool kullan.
+- bir API yoğunlaşırsa diğer API' nin kaynaklarını yemez.
+
+### Graceful Degradation (Kullanıcıya nasıl davranırız?)
+
+Eğer bir microservis dönmüyorsa:
+
+- Serve cached data (önbellekleki son iyi sonuç)
+- Minimal/ degraded UI (örn. "şu an yorumlar yükleniyor")
+- Fail-fast: uzun bekletme yerine hızlı fallback döndürür.
+
+### Monitoring & Metrics (mutlaka izle)
+
+Her circuit breaker için:
+
+- requestRate
+- errorRate
+- latency (P50/ P95/ P99)
+- state changes (Open->Half Open-> Closed)
+- retry count
+- downstream latency
+
+Uyarılar(alert):
+
+- CB open sayısı artarsa (yüzde veya absolut)
+- Latency P95 > hedef
+- Retries > threshold
+
+**Gerçek Hayatta Kullanım Örnekleri:**
+
+- Netflix Hystrix(eski) -> circuit breaker implementasyonu ünlüdür.
+- Envoy ve Istio gibi servis mesh' ler circuit breaker, retries ve timeouts sağlar.
+- API Gateway (NGINX, Kong, AWS API GW)
+
+### Örnek Senaryo: Ödeme Servisi:
+
+1. Kullanıcı ödeme yapar. -> call PaymentService()
+2. Eğer PaymentService timeout veya hata verirse: 
+- Retry(Maks 3) exponential backoff ile.
+- Eğer CB açıldıysa: fallback-> "Ödeme işleminiz şuan yavaş. Lütfen faha sonra tekrar deneyin veya destek ile iltişime geçin."
+- Backgorund: enqueue event for manual investigation or retry.
+
+Ayrıca ödeme için idempotency-key kullanılmalı, tekrar çağrıda çifte ödeme engellenmeli.
