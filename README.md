@@ -684,7 +684,7 @@ Uyarılar(alert):
 - Envoy ve Istio gibi servis mesh' ler circuit breaker, retries ve timeouts sağlar.
 - API Gateway (NGINX, Kong, AWS API GW)
 
-### Örnek Senaryo: Ödeme Servisi:
+### Örnek Senaryo: (Ödeme Servisi)
 
 1. Kullanıcı ödeme yapar. -> call PaymentService()
 2. Eğer PaymentService timeout veya hata verirse: 
