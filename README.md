@@ -754,3 +754,58 @@ API_Gateway -->|Final Response| Client
 | Final Response | Müşteriye "ya gerçek cevap ya da gracefull fallback" gösterilir |
 
 ---
+
+# Service Discovery & API Gateway Tasarımı
+
+Bu dersle birlikte artık microservis mimarisinin network katmanına giriş yapıyoruz.
+
+Bundan önce şunu çözdük:
+
+- Bir sistem nasıl ölçeklenir ? 
+- Trafik çok geldiğinde nasıl korunur ?
+- Servis hata verirse nasıl ayağa kalkar ? 
+
+Şimdi sorumuz şu:
+
+> Bir sürü mikroservis var. Bunlar birbirlerini nasıl buluyor? Trafik nasıl doğru servise yönlendiriyor?
+
+## Temel Kavramlar
+
+| `Kavram` | `Açıklama` | `Analojisi` |
+| --- | --- | --- |
+| Service Discovery | Servislerin birbirini otomatik olarak bulmasını sağlayan mekanizma | "Arkadaşlarının telefon numarasını ezberlemek yerine rehbere bakmak" |
+| API Gateway | Dış dünyadan gelen tüm isteklerin tek giriş noktası | Apartmanın kapıcısı gibi - gelen herkesi ilgili kata yönlendirir |
+| Service Registry | Servislerin adreslerinin (IP/ Port) kayıtlı olduğu yer | Telefon rehberi |
+| Ingress/ Egress | Sisteme giriş/ sistemden dışarı çıkan trafik | Kapı giriş-çıkış kontrolü |
+| Sidecar Pattern | Her servisin yanında bir "ajan" container | "Koruma görevlisiyle dolaşan ünlü" |
+
+### Service Discovery Türleri
+
+1. **Client-side Discovery:** İstemci(client) direkt registry' den sorar "hangi servis nerede?" (örn: Netflix OSS (Eureka + Ribbon))
+2. **Server-side Discovery:** API Gateway/ Load Balancer yönlendirir. (Kubernates + Envoy/ Istio combo)
+
+**Örnek Senaryo:**
+
+- Sipariş Servisi -> Ödeme Servisi' ne istek atacak ama IP' de çalıştığını bilmiyor. Çünkü container her yeniden deploy edildiğinde IP değişiyor.
+
+**Çözüm:**
+
+1. Payment Service ayağa kalktığında Service Registry' ye kaydolur.
+2. Oder Service registry' den "payment nerede?" diye sorar.
+3. İstek doğru yere gider.
+
+```mermaid
+flowchart LR
+
+Client --> API_Gateway
+
+API_Gateway --> Service_Registry
+
+API_Gateway -->|Route Request| Order_Service
+
+Order_Service --> Service_Registry
+Order_Service -->|Call Payment| Payment_Service
+
+```
+
+
