@@ -719,4 +719,4 @@ Ayrıca ödeme için idempotency-key kullanılmalı, tekrar çağrıda çifte ö
 
 Kaynakları bölmeye denir. Örneğin "ödeme servisine ayrılmış 20 thread, diğer API' lere 20 thread" diye bölmek. Böylece ödeme servisi yavaşlasa bile diğer servisleri bozmaz.
 
---
+---
