@@ -510,7 +510,7 @@ Rate limit uygulanabilecek 4 farklı katman bulunur.
 3. **Middleware/ Code Level:** Express/ Nest/ Spring interceptor -> Esnek ama app yüklenir
 4. **Firewall/ Network Level:** Cloudflare, AWS WAF -> Botlara karşı en etkili
 
->> **Gerçek dünya sistemlerinde Rate limit genelde Redis + Sliding Window/ Token Bucket algoritmasıyla yapılır.**
+> **Gerçek dünya sistemlerinde Rate limit genelde Redis + Sliding Window/ Token Bucket algoritmasıyla yapılır.**
 
 * 1️⃣ Bir login endpoint’i için Rate Limiting uygulanmalı mı? Nasıl bir limit koyardın?
 
@@ -526,7 +526,7 @@ Rate limit uygulanabilecek 4 farklı katman bulunur.
 
 Rate limiting sistemlerde en çok kullanılan algoritma: 
 
->> Token Bucket (ve varyasyonu: Leaky Bucket)
+> Token Bucket (ve varyasyonu: Leaky Bucket)
 
 ## Token Bucket Mantığı
 
