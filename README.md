@@ -563,7 +563,7 @@ Her kullanıcıya bir bucket (kova) veriyoruz.
 
 * Cevap: Eğer yalnızca bir tanesini kullanacak isem Sliding Window rate limit modelini seçerdim. Çünkü brute force karşı daha önemli bir yöntem olurdu. Ama eğer birden fazla kullanacaksam Sliding Window ve Token Bucket yöntemlerini bir arada kullanabilirdim. Login endpoint' i için belirli sayıda bir token olurdu mesela 3 token. İlk 3 denemede parolayı hatırlamadıysa kullanıcı Token Bucket' ta login endpoint için olan istekleri sıfırlardım ve iki adımlı doğrulama kullanmasını isterdim. Burda da aşırı istek oluyorsa şayet sliding window ile belirlediğim limite göre bağlantıyı kapatırdım. 
 
----
+--
 
 # Circuit & Breaker Failover
 
@@ -719,3 +719,4 @@ Ayrıca ödeme için idempotency-key kullanılmalı, tekrar çağrıda çifte ö
 
 Kaynakları bölmeye denir. Örneğin "ödeme servisine ayrılmış 20 thread, diğer API' lere 20 thread" diye bölmek. Böylece ödeme servisi yavaşlasa bile diğer servisleri bozmaz.
 
+--
