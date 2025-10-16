@@ -719,4 +719,38 @@ Ayrıca ödeme için idempotency-key kullanılmalı, tekrar çağrıda çifte ö
 
 Kaynakları bölmeye denir. Örneğin "ödeme servisine ayrılmış 20 thread, diğer API' lere 20 thread" diye bölmek. Böylece ödeme servisi yavaşlasa bile diğer servisleri bozmaz.
 
+**Circuit Breaker + Retry + Failover mimarisinin sade ve anlaşılır bir Mermaid diyagramı:**
+
+```mermaid
+
+flowchart TD
+
+Client -->|Request| API_Gateway
+
+API_Gateway -->|Calls| Circuit_Breaker
+
+Circuit_Breaker -->|Service Available| Service_A
+Circuit_Breaker -->|Service Down| Retry_Logic
+
+Retry_Logic -->|Max Retries Reached| Failover_Service
+Retry_Logic -->|Retry Success| Service_A
+
+Service_A -->|Response| Circuit_Breaker
+Failover_Service -->|Fallback Response| Circuit_Breaker
+
+Circuit_Breaker -->|Returns| API_Gateway
+API_Gateway -->|Final Response| Client
+
+```
+
+**Basit Okuma Mantığı:**
+
+| `Bileşen` | `Açıklama` |
+| --- | --- |
+| API Gateway | Tüm isteklerin giriş noktası | 
+| Circuit Breaker | Hataları takip eder -> Gerekirse servisi "bloklar" | 
+| Retry Logic | Yeniden deneme (backoff + jitter) | 
+| Failover Service | Ana servis çökerse devreye giren yedek | 
+| Final Response | Müşteriye "ya gerçek cevap ya da gracefull fallback" gösterilir |
+
 ---
