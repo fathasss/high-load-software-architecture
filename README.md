@@ -583,7 +583,7 @@ Bir servise ya da dışa bağımlı bir kaynağa sürekli başarısız istek atm
 ### Tipik Circuit Breaker Kuralları (pratik)
 
 * windowSize: son N istekte ne kadar hata yoksa?
-* failureThreshold: % hata oranı (örn. %50) veya hatalı istek sayısı (örn. 20) aşılırsa Open
+* failureThreshold: % hata oranı (örn. %50) veya hatalı istek sayısı (örn. 20) aşılırsa -> Open
 * openTimeout: Open durumunda bekleme süresi (örn. 30s).
 * halfOpenMaxCalls:  Half-open' dayken kaç istek test edilecek. (örn. 5).
 * successThreshold: Half-open testlerde kaç başarılı istek şart (örn. 3) -> Closed.
@@ -635,14 +635,14 @@ class CircuitBreaker{
 
 1. **MaxRetries:** 3
 2. **Backoff:** exponential (e.g., 100ms,  200ms, 400ms)
-3. **Jitter:** küçük rastgeleleştirme ekle, thundering hard önlenir.
+3. **Jitter:** küçük rastgeleleştirme ekle, thundering herd önlenir.
 4. **Idempotency:** retry edilebilecek çağrılar idempotent olmalı veya idempotency-key kullanılmalı. (örn: ödeme işlemleri için)
 
 ### Failover & Routing
 
 1. **Active-Passive:** Primary' den hata alındığında Secondary' ye yönlendir.
 2. **Active-Active:** Trafik her iki bölgeye de gider; bir bölge düşerse diğerleri kalır.
-3. **Geo-Failover:** Bölge düşerse DNS veya global LB ile trafiği başka bölgeye taşı.
+3. **Geo-Failover:** Bölge düşerse DNS veya global Load Balancer ile trafiği başka bölgeye taşı.
 
 Örnek : DB read-replicas -> read from nearest replica; primary fail olursa promote replica veya route clients to other region.
 
@@ -672,7 +672,7 @@ Her circuit breaker için:
 
 Uyarılar(alert):
 
-- CB open sayısı artarsa (yüzde veya absolut)
+- Circuit Breaker open sayısı artarsa (yüzde veya absolut)
 - Latency P95 > hedef
 - Retries > threshold
 
@@ -688,6 +688,32 @@ Uyarılar(alert):
 2. Eğer PaymentService timeout veya hata verirse: 
 - Retry(Maks 3) exponential backoff ile.
 - Eğer CB açıldıysa: fallback-> "Ödeme işleminiz şuan yavaş. Lütfen faha sonra tekrar deneyin veya destek ile iltişime geçin."
-- Backgorund: enqueue event for manual investigation or retry.
+- Background: enqueue event for manual investigation or retry.
 
 Ayrıca ödeme için idempotency-key kullanılmalı, tekrar çağrıda çifte ödeme engellenmeli.
+
+**TERİMLER**
+
+| `Terim` | `Açıklama` | `Örnek` |
+| --- | --- | --- | 
+| Latency | Gecikme süresi(bir isteğin gidiş-geliş zamanı) | "Whatsapp mesajı ne kadar sürede karşıya gidiyor?" | 
+| Backoff | Hata olduğunda tekrar denemeden önce bekleme süresi | Kapı kilitli -> 1 saniye sonra tekrar dene, yine kilitli -> 2 saniye sonra dene |
+| Exponential Backoff | Bekleme süresi katlanarak artıyorsa | 1s-> 2s-> 4s-> 8s şeklinde beklemek |  
+| Jitter | Backoff süresine rastgelelilik eklemek | 4 saniye beklemesi gerekirken bazen 3.8s veya 4.2 saniye bekletmek | 
+| Thundering Herd | Birçok sistem aynı anda saldırıya geçerse oluşturduğu aşırı yük (sürü psikolojisi problemi) | 100 telefon aynı anda Amazon'a "Şimdi Yenile" dediğinde sistem düşer |
+| Enqueue | Kuyruğa eklemek | "Bir işi sonra yap" diye bir listeye yazmak | 
+
+* 1️⃣ Circuit breaker hangi üç durumda Open olabilir?
+
+- Peş peşe çok fazla hata olursa (örneğin 10 denemenin 7’si hata)
+- Timeout sayısı artarsa (servis cevap vermiyor)
+- Bağlantı kurulamazsa (DNS / Network arızası)
+
+* 2️⃣ Retry stratejisinde jitter neden önemlidir?
+
+Çünkü tüm sistemler aynı anda tekrar denerse büyük çöküş olur. Jitter küçük rastgele bekleme koyarak "sürü halinde saldırıyı" engeller.
+
+* 3️⃣ Bulkhead nedir?
+
+Kaynakları bölmeye denir. Örneğin "ödeme servisine ayrılmış 20 thread, diğer API' lere 20 thread" diye bölmek. Böylece ödeme servisi yavaşlasa bile diğer servisleri bozmaz.
+
