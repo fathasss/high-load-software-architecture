@@ -1170,7 +1170,7 @@ WHERE Id = 5 AND Version = 5
 Eğer 2 işlem aynı anda buna vurursa:
 
 * Sadece ilk işlem başarılı olur.
-* Diğerinin WHERE koşulu tutmadığı için 0 row updated olur
+* Diğerinin WHERE koşulu tutmadığı için `(0) row updated` olur
 
 Bu da şunu garanti eder:
 - Overselling olmaz
