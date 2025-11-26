@@ -1246,6 +1246,171 @@ Genelde:
 
 kombinasyonlarını kullanırlar.
 
+### Atomic Operation Nedir ? 
+
+> Bu işlem; asla bölünemez, başka hiçbir işlem araya giremez.
+
+**Yani:**
+
+İşlem ya tamamen tamamlanır ya da hiç yapılmaz. Ama hiçbir zaman yarım olmaz. Hiçbir başka işlem araya giremez.
+
+Buna `atomicity` denir.
+
+**Normal atomic olmayan işlem:**
+
+```ini
+x = x +1
+```
+
+Bu aslında CPU seviyesinde 3 adımdır.
+
+1. x değerini oku
+2. 1 ekle
+3. geri yaz
+
+İki kullanıcı aynı anda bunu yaparsa;
+
+**Kullanıcı 1:**
+
+x = 10 -> `okudu` -> `11 yazacak`
+
+**Kullanıcı 2:**
+
+x = 10 -> `okudu` -> `11 yazacak`
+
+Sonuç = 11
+
+Doğru olması gereken = 12
+
+
+Buna `race condition` denir.
+
+Atomic Operation ile:
+
+```nginx
+INCR x 
+```
+
+Bu tek işlem blokudur:
+* Araya kimse giremez.
+* Bir işlem tamamlanmadan diğeri başlayamaz.
+
+**Sonuç:**
+
+```arduino
+10 -> 11 -> 12 (true)
+```
+
+**En güzel Örnek**
+
+Bankada para transferi:
+
+```ini
+balance = balance - 100
+```
+
+Eğer atomic değilse:
+
+* İki işlem aynı anda çekilebilir.
+* Hesap -100' e düşebilir.
+* Fraud oluşur.
+
+Ama atomic olursa:
+
+* Aynı anda işlem yapılmaz.
+* Diğer işlem sıraya girer.
+* Tutarlılık korunur.
+
+> Peki atomic operation en çok nerede kullanılır ?
+
+1. Redis
+
+Redis' in şu komutları atomic:
+
+```nginx
+INCR
+DECR
+HINCRBY
+LPUSH
+RPOP
+SETNX
+```
+
+Bu yüzden redis high-load sistemlerde gerçekten altın değerinde.
+
+2. Database (SQL) - **Sınırlı Atomic**
+
+SQL' de bazı şeyler atomic:
+
+1. Primary key insert
+2. Auto-increment
+3. Certain row updates
+
+Ama:
+
+* Row locking oluşur.
+* Yavaşlar.
+* High-Load altında çökebilir.
+
+`Bu yüzden Redis kadar hızlı değildir.`
+
+3. Message Queues
+
+SQS, Kafka, RabbitMQ:
+
+1. Message consume işlemi atomictir.
+2. Aynı mesaj iki kere işlemez.
+3. Aynı anda iki consumer alamaz.
+
+| `Özet` | `Atomic Operation` |
+| ------ | -------------------|
+| Bölünemez mi ? | Evet |
+| Araya işlem girer mi ? | Hayır |
+| High-Load' a güvenilir mi ? | Çok |
+| DB Lock yaratır mı ? | Hayır |
+| Race condition çözer mi? | Evet |
+
+> Gerçek Dünya Örneği
+
+**Instragm Like Sayacı:**
+
+Eğer like sayısını DB UPDATE ile yaparsan:
+
+```sql
+UPDATE posts SET likes = likes + 1
+```
+
+- Deadlock
+- Row lock
+- Overselling (hatalı sayım)
+- Yavaşlık
+
+Ama **Redis** ile yaparsan;
+
+```ruby
+INCR post:123:likes
+```
+
+> 1 milyon like/ saniye bile sorunsuz.
+
+**NodeJs ile gerçek atomic örnek:**
+
+Redis kullanarak:
+
+```js
+const likes = await redis.incr("post:123:likes")
+console.log("Like sayısı: ", likes)
+```
+
+Bu işlem:
+
+* Tek CPU cycle değildir.
+* Ama atomic işlem olarak yürütülür.
+
+
+
+
+
 
 
 
